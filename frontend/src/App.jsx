@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard'
 import ContractList from './pages/ContractList'
 import ContractDetail from './pages/ContractDetail'
 import CalendarView from './pages/CalendarView'
+import RecycleBin from './pages/RecycleBin'
 
 function App() {
   return (
@@ -15,6 +16,7 @@ function App() {
           <Route path="contracts" element={<ContractList />} />
           <Route path="contracts/:id" element={<ContractDetail />} />
           <Route path="calendar" element={<CalendarView />} />
+          <Route path="recycle" element={<RecycleBin />} />
         </Route>
       </Routes>
     </ContractProvider>

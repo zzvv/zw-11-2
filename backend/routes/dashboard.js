@@ -7,16 +7,23 @@ const moment = require('moment');
 // 仪表盘统计
 router.get('/stats', async (req, res) => {
   try {
-    const totalContracts = await Contract.countDocuments();
-    const activeContracts = await Contract.countDocuments({ status: '执行中' });
-    const expiredContracts = await Contract.countDocuments({ status: '已到期' });
-    const totalAmount = await Contract.aggregate([{ $group: { _id: null, sum: { $sum: '$amount' } } }]);
-    const executedAmount = await Contract.aggregate([{ $group: { _id: null, sum: { $sum: '$executedAmount' } } }]);
+    const totalContracts = await Contract.countDocuments({ isDeleted: { $ne: true } });
+    const activeContracts = await Contract.countDocuments({ status: '执行中', isDeleted: { $ne: true } });
+    const expiredContracts = await Contract.countDocuments({ status: '已到期', isDeleted: { $ne: true } });
+    const totalAmount = await Contract.aggregate([
+      { $match: { isDeleted: { $ne: true } } },
+      { $group: { _id: null, sum: { $sum: '$amount' } } }
+    ]);
+    const executedAmount = await Contract.aggregate([
+      { $match: { isDeleted: { $ne: true } } },
+      { $group: { _id: null, sum: { $sum: '$executedAmount' } } }
+    ]);
 
     // 即将到期（30天内）
     const thirtyDaysLater = moment().add(30, 'days').toDate();
     const expiringSoon = await Contract.countDocuments({
       status: '执行中',
+      isDeleted: { $ne: true },
       expiryDate: { $lte: thirtyDaysLater, $gte: new Date() }
     });
 

@@ -30,12 +30,21 @@ const contractSchema = new mongoose.Schema({
   alertSent30: { type: Boolean, default: false },
   alertSent60: { type: Boolean, default: false },
   alertSent90: { type: Boolean, default: false },
-  version: { type: Number, default: 1 }
+  version: { type: Number, default: 1 },
+  isDeleted: { type: Boolean, default: false },
+  deletedAt: { type: Date }
 }, { timestamps: true });
 
 contractSchema.pre('save', function(next) {
   this.remainingAmount = this.amount - this.executedAmount;
   this.executionPercent = this.amount > 0 ? Math.round((this.executedAmount / this.amount) * 1000) / 10 : 0;
+  next();
+});
+
+contractSchema.pre(/^find/, function(next) {
+  if (!this.getOptions().includeDeleted) {
+    this.where({ isDeleted: { $ne: true } });
+  }
   next();
 });
 

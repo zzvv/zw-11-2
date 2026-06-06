@@ -1,17 +1,19 @@
 import { Link, useLocation } from 'react-router-dom'
-import { LayoutDashboard, FileText, CalendarDays, AlertTriangle } from 'lucide-react'
+import { LayoutDashboard, FileText, CalendarDays, AlertTriangle, Trash2 } from 'lucide-react'
 import AlertBanner from './AlertBanner'
 import { useContracts } from '../context/ContractContext'
+import { Outlet } from 'react-router-dom'
 
 const navItems = [
   { path: '/', label: '仪表盘', icon: LayoutDashboard },
   { path: '/contracts', label: '合同管理', icon: FileText },
   { path: '/calendar', label: '到期日历', icon: CalendarDays },
+  { path: '/recycle', label: '回收站', icon: Trash2 },
 ]
 
 export default function Layout() {
   const location = useLocation()
-  const { alerts } = useContracts()
+  const { alerts, recycleCount } = useContracts()
   const urgentAlerts = alerts.filter(a => a.level === 'red')
 
   return (
@@ -40,6 +42,11 @@ export default function Layout() {
                     {urgentAlerts.length}
                   </span>
                 )}
+                {item.path === '/recycle' && recycleCount > 0 && (
+                  <span className="ml-auto bg-gray-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                    {recycleCount}
+                  </span>
+                )}
               </Link>
             )
           })}
@@ -59,5 +66,3 @@ export default function Layout() {
     </div>
   )
 }
-
-import { Outlet } from 'react-router-dom'

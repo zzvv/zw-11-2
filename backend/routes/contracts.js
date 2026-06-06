@@ -2,8 +2,10 @@ const express = require('express');
 const router = express.Router();
 const Contract = require('../models/Contract');
 const ChangeRecord = require('../models/ChangeRecord');
+const PaymentPlan = require('../models/PaymentPlan');
+const CleanupLog = require('../models/CleanupLog');
+const moment = require('moment');
 
-// 获取合同列表（支持筛选排序）
 router.get('/', async (req, res) => {
   try {
     const { type, status, minAmount, maxAmount, expiryStart, expiryEnd, sortBy, order, keyword } = req.query;
@@ -41,7 +43,31 @@ router.get('/', async (req, res) => {
   }
 });
 
-// 获取单个合同
+router.get('/recycle', async (req, res) => {
+  try {
+    const contracts = await Contract.find({ isDeleted: true }).setOptions({ includeDeleted: true }).sort({ deletedAt: -1 });
+    const data = contracts.map(c => {
+      const obj = c.toObject();
+      const daysLeft = 30 - moment().diff(moment(c.deletedAt), 'days');
+      obj.daysLeft = Math.max(0, daysLeft);
+      obj.willExpire = daysLeft <= 0;
+      return obj;
+    });
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+router.get('/recycle/count', async (req, res) => {
+  try {
+    const count = await Contract.countDocuments({ isDeleted: true }).setOptions({ includeDeleted: true });
+    res.json({ success: true, data: { count } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const contract = await Contract.findById(req.params.id);
@@ -52,7 +78,6 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// 创建合同
 router.post('/', async (req, res) => {
   try {
     const contract = new Contract(req.body);
@@ -63,7 +88,6 @@ router.post('/', async (req, res) => {
   }
 });
 
-// 更新合同
 router.put('/:id', async (req, res) => {
   try {
     const contract = await Contract.findByIdAndUpdate(req.params.id, req.body, { new: true });
@@ -74,19 +98,103 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// 删除合同
 router.delete('/:id', async (req, res) => {
   try {
-    await Contract.findByIdAndDelete(req.params.id);
-    await require('../models/PaymentPlan').deleteMany({ contractId: req.params.id });
-    await ChangeRecord.deleteMany({ contractId: req.params.id });
-    res.json({ success: true, message: '合同已删除' });
+    const contract = await Contract.findByIdAndUpdate(
+      req.params.id,
+      { isDeleted: true, deletedAt: new Date() },
+      { new: true }
+    );
+    if (!contract) return res.status(404).json({ success: false, message: '合同不存在' });
+    res.json({ success: true, message: '合同已移入回收站，将保留30天' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// 批量导入
+router.post('/recycle/restore/:id', async (req, res) => {
+  try {
+    const contract = await Contract.findByIdAndUpdate(
+      req.params.id,
+      { isDeleted: false, deletedAt: null },
+      { new: true }
+    ).setOptions({ includeDeleted: true });
+    if (!contract) {
+      return res.status(404).json({ success: false, message: '合同不存在或未在回收站中' });
+    }
+    res.json({ success: true, message: '合同及关联数据已恢复' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+router.delete('/recycle/permanent/:id', async (req, res) => {
+  try {
+    const contract = await Contract.findById(req.params.id).setOptions({ includeDeleted: true });
+    if (!contract || !contract.isDeleted) {
+      return res.status(404).json({ success: false, message: '合同不存在或未在回收站中' });
+    }
+
+    const paymentCount = await PaymentPlan.countDocuments({ contractId: contract._id });
+    const changeCount = await ChangeRecord.countDocuments({ contractId: contract._id });
+
+    await PaymentPlan.deleteMany({ contractId: contract._id });
+    await ChangeRecord.deleteMany({ contractId: contract._id });
+    await Contract.findByIdAndDelete(contract._id).setOptions({ includeDeleted: true });
+
+    await CleanupLog.create({
+      contractId: contract._id,
+      contractNo: contract.contractNo,
+      contractName: contract.name,
+      deletedPaymentCount: paymentCount,
+      deletedChangeCount: changeCount,
+      cleanupType: 'manual',
+      cleanedBy: req.body.cleanedBy || '系统管理员'
+    });
+
+    res.json({ success: true, message: '合同已彻底删除' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+router.delete('/recycle/empty', async (req, res) => {
+  try {
+    const contracts = await Contract.find({ isDeleted: true }).setOptions({ includeDeleted: true });
+    let totalPayments = 0;
+    let totalChanges = 0;
+
+    for (const contract of contracts) {
+      const paymentCount = await PaymentPlan.countDocuments({ contractId: contract._id });
+      const changeCount = await ChangeRecord.countDocuments({ contractId: contract._id });
+      totalPayments += paymentCount;
+      totalChanges += changeCount;
+
+      await PaymentPlan.deleteMany({ contractId: contract._id });
+      await ChangeRecord.deleteMany({ contractId: contract._id });
+
+      await CleanupLog.create({
+        contractId: contract._id,
+        contractNo: contract.contractNo,
+        contractName: contract.name,
+        deletedPaymentCount: paymentCount,
+        deletedChangeCount: changeCount,
+        cleanupType: 'manual',
+        cleanedBy: req.body.cleanedBy || '系统管理员'
+      });
+    }
+
+    await Contract.deleteMany({ isDeleted: true }).setOptions({ includeDeleted: true });
+
+    res.json({
+      success: true,
+      message: `回收站已清空，共删除 ${contracts.length} 个合同、${totalPayments} 条付款计划、${totalChanges} 条变更记录`
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 router.post('/import', async (req, res) => {
   try {
     const { contracts } = req.body;

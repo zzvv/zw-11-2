@@ -7,6 +7,8 @@ const ContractContext = createContext()
 
 export const ContractProvider = ({ children }) => {
   const [contracts, setContracts] = useState([])
+  const [recycleBin, setRecycleBin] = useState([])
+  const [recycleCount, setRecycleCount] = useState(0)
   const [stats, setStats] = useState(null)
   const [alerts, setAlerts] = useState([])
   const [loading, setLoading] = useState(false)
@@ -22,6 +24,24 @@ export const ContractProvider = ({ children }) => {
       console.error(err)
     } finally {
       setLoading(false)
+    }
+  }, [])
+
+  const fetchRecycleBin = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/contracts/recycle`)
+      setRecycleBin(res.data.data || [])
+    } catch (err) {
+      console.error(err)
+    }
+  }, [])
+
+  const fetchRecycleCount = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/contracts/recycle/count`)
+      setRecycleCount(res.data.data?.count || 0)
+    } catch (err) {
+      console.error(err)
     }
   }, [])
 
@@ -56,8 +76,32 @@ export const ContractProvider = ({ children }) => {
   }
 
   const deleteContract = async (id) => {
-    await axios.delete(`${API_BASE}/contracts/${id}`)
+    const res = await axios.delete(`${API_BASE}/contracts/${id}`)
     await fetchContracts()
+    await fetchRecycleCount()
+    return res.data
+  }
+
+  const restoreContract = async (id) => {
+    const res = await axios.post(`${API_BASE}/contracts/recycle/restore/${id}`)
+    await fetchRecycleBin()
+    await fetchRecycleCount()
+    await fetchContracts()
+    return res.data
+  }
+
+  const permanentDeleteContract = async (id) => {
+    const res = await axios.delete(`${API_BASE}/contracts/recycle/permanent/${id}`)
+    await fetchRecycleBin()
+    await fetchRecycleCount()
+    return res.data
+  }
+
+  const emptyRecycleBin = async () => {
+    const res = await axios.delete(`${API_BASE}/contracts/recycle/empty`)
+    await fetchRecycleBin()
+    await fetchRecycleCount()
+    return res.data
   }
 
   const importContracts = async (contractsData) => {
@@ -70,13 +114,16 @@ export const ContractProvider = ({ children }) => {
     fetchContracts()
     fetchStats()
     fetchAlerts()
-  }, [fetchContracts, fetchStats, fetchAlerts])
+    fetchRecycleCount()
+  }, [fetchContracts, fetchStats, fetchAlerts, fetchRecycleCount])
 
   return (
     <ContractContext.Provider value={{
-      contracts, stats, alerts, loading,
-      fetchContracts, fetchStats, fetchAlerts,
-      createContract, updateContract, deleteContract, importContracts
+      contracts, recycleBin, recycleCount, stats, alerts, loading,
+      fetchContracts, fetchRecycleBin, fetchRecycleCount, fetchStats, fetchAlerts,
+      createContract, updateContract, deleteContract,
+      restoreContract, permanentDeleteContract, emptyRecycleBin,
+      importContracts
     }}>
       {children}
     </ContractContext.Provider>
