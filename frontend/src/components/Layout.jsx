@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { LayoutDashboard, FileText, CalendarDays, AlertTriangle, Trash2 } from 'lucide-react'
+import { LayoutDashboard, FileText, CalendarDays, AlertTriangle, Trash2, CheckCircle, XCircle, Info } from 'lucide-react'
 import AlertBanner from './AlertBanner'
 import { useContracts } from '../context/ContractContext'
 import { Outlet } from 'react-router-dom'
@@ -11,6 +11,34 @@ const navItems = [
   { path: '/recycle', label: '回收站', icon: Trash2 },
 ]
 
+const ToastContainer = () => {
+  const { toast } = useContracts()
+  if (!toast) return null
+
+  const style = {
+    success: 'bg-success-600',
+    error: 'bg-danger-600',
+    info: 'bg-primary-600',
+    warning: 'bg-warning-600'
+  }[toast.type] || 'bg-gray-700'
+
+  const Icon = {
+    success: CheckCircle,
+    error: XCircle,
+    info: Info,
+    warning: AlertTriangle
+  }[toast.type] || Info
+
+  return (
+    <div className="fixed top-6 right-6 z-50 animate-pulse">
+      <div className={`${style} text-white px-5 py-3 rounded-lg shadow-lg flex items-center gap-3 min-w-[280px]`}>
+        <Icon size={18} />
+        <span className="text-sm font-medium">{toast.message}</span>
+      </div>
+    </div>
+  )
+}
+
 export default function Layout() {
   const location = useLocation()
   const { alerts, recycleCount } = useContracts()
@@ -18,6 +46,7 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen flex">
+      <ToastContainer />
       {/* Sidebar */}
       <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
         <div className="p-6 border-b border-gray-100">

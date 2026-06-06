@@ -1,28 +1,42 @@
 import { useEffect } from 'react'
-import { Trash2, RotateCcw, Trash, RefreshCw, Clock, AlertTriangle } from 'lucide-react'
+import { Trash2, RotateCcw, Trash, RefreshCw, Clock, AlertTriangle, Loader2 } from 'lucide-react'
 import { useContracts } from '../context/ContractContext'
 import moment from 'moment'
 
 export default function RecycleBin() {
-  const { recycleBin, loading, fetchRecycleBin, restoreContract, permanentDeleteContract, emptyRecycleBin } = useContracts()
+  const { recycleBin, loading, actionLoading, fetchRecycleBin, restoreContract, permanentDeleteContract, emptyRecycleBin } = useContracts()
 
   useEffect(() => {
     fetchRecycleBin()
   }, [fetchRecycleBin])
 
+  const isRestoring = (id) => !!actionLoading[`restore-${id}`]
+  const isPermanentDeleting = (id) => !!actionLoading[`permanent-${id}`]
+  const isEmptying = !!actionLoading['empty']
+  const isAnyActionRunning = Object.values(actionLoading).some(v => !!v)
+
   const handleRestore = async (id, name) => {
     if (!confirm(`确认恢复合同「${name}」？将同时恢复其关联的付款计划和变更记录。`)) return
-    await restoreContract(id)
+    try {
+      await restoreContract(id)
+    } catch (_) {
+    }
   }
 
   const handlePermanentDelete = async (id, name) => {
     if (!confirm(`确认彻底删除合同「${name}」？此操作不可恢复，将级联删除所有关联数据。`)) return
-    await permanentDeleteContract(id)
+    try {
+      await permanentDeleteContract(id)
+    } catch (_) {
+    }
   }
 
   const handleEmpty = async () => {
     if (!confirm('确认清空回收站？所有合同将被彻底删除，此操作不可恢复！')) return
-    await emptyRecycleBin()
+    try {
+      await emptyRecycleBin()
+    } catch (_) {
+    }
   }
 
   const getDaysLeftStyle = (daysLeft) => {
@@ -41,18 +55,20 @@ export default function RecycleBin() {
         <div className="flex items-center gap-3">
           <button
             onClick={fetchRecycleBin}
-            className="btn-secondary flex items-center gap-2"
+            disabled={isAnyActionRunning}
+            className="btn-secondary flex items-center gap-2 disabled:opacity-50"
           >
-            <RefreshCw size={16} />
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
             刷新
           </button>
           {recycleBin.length > 0 && (
             <button
               onClick={handleEmpty}
-              className="bg-danger-500 hover:bg-danger-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors"
+              disabled={isEmptying}
+              className="bg-danger-500 hover:bg-danger-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Trash size={16} />
-              清空回收站
+              {isEmptying ? <Loader2 size={16} className="animate-spin" /> : <Trash size={16} />}
+              {isEmptying ? '清空中...' : '清空回收站'}
             </button>
           )}
         </div>
@@ -64,7 +80,7 @@ export default function RecycleBin() {
             <AlertTriangle size={20} className="text-warning-600 mt-0.5 flex-shrink-0" />
             <div className="text-sm text-warning-800">
               <p className="font-medium">重要提示</p>
-              <p className="mt-1">回收站中的合同将在删除30天后被系统自动彻底清理。请及时恢复需要保留的合同。</p>
+              <p className="mt-1">回收站中的合同将在删除30天后被系统自动彻底清理。点击「恢复」可还原合同及其关联的付款计划和变更记录。</p>
             </div>
           </div>
         </div>
@@ -79,47 +95,66 @@ export default function RecycleBin() {
         </div>
       ) : (
         <div className="space-y-3">
-          {recycleBin.map(c => (
-            <div key={c._id} className="card py-5 hover:shadow-md transition-shadow opacity-90">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-gray-700 line-through">{c.name}</span>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{c.type}</span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1 ${getDaysLeftStyle(c.daysLeft)}`}>
-                      <Clock size={12} />
-                      {c.willExpire ? '即将清理' : `剩余 ${c.daysLeft} 天`}
-                    </span>
+          {recycleBin.map(c => {
+            const restoring = isRestoring(c._id)
+            const permDeleting = isPermanentDeleting(c._id)
+            const disabled = restoring || permDeleting
+            return (
+              <div key={c._id} className={`card py-5 hover:shadow-md transition-shadow opacity-90 ${disabled ? 'pointer-events-none' : ''}`}>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-gray-700 line-through">{c.name}</span>
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{c.type}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1 ${getDaysLeftStyle(c.daysLeft)}`}>
+                        <Clock size={12} />
+                        {c.willExpire ? '即将清理' : `剩余 ${c.daysLeft} 天`}
+                      </span>
+                      {restoring && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-primary-50 text-primary-600 flex items-center gap-1">
+                          <Loader2 size={12} className="animate-spin" />
+                          恢复中...
+                        </span>
+                      )}
+                      {permDeleting && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-danger-50 text-danger-600 flex items-center gap-1">
+                          <Loader2 size={12} className="animate-spin" />
+                          删除中...
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-2 text-sm text-gray-500 grid grid-cols-4 gap-4">
+                      <div>编号: {c.contractNo}</div>
+                      <div>甲方: {c.partyA?.name}</div>
+                      <div>乙方: {c.partyB?.name}</div>
+                      <div>金额: <span className="font-semibold text-gray-600">¥{c.amount?.toLocaleString()}</span></div>
+                    </div>
+                    <div className="mt-2 text-xs text-gray-400">
+                      删除时间: {moment(c.deletedAt).format('YYYY-MM-DD HH:mm')}
+                    </div>
                   </div>
-                  <div className="mt-2 text-sm text-gray-500 grid grid-cols-4 gap-4">
-                    <div>编号: {c.contractNo}</div>
-                    <div>甲方: {c.partyA?.name}</div>
-                    <div>乙方: {c.partyB?.name}</div>
-                    <div>金额: <span className="font-semibold text-gray-600">¥{c.amount?.toLocaleString()}</span></div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleRestore(c._id, c.name)}
+                      disabled={disabled}
+                      className="px-3 py-1.5 text-sm font-medium text-primary-600 hover:bg-primary-50 rounded-lg flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {restoring ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
+                      {restoring ? '恢复中' : '恢复'}
+                    </button>
+                    <button
+                      onClick={() => handlePermanentDelete(c._id, c.name)}
+                      disabled={disabled}
+                      className="px-3 py-1.5 text-sm font-medium text-danger-600 hover:bg-danger-50 rounded-lg flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {permDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash size={14} />}
+                      {permDeleting ? '删除中' : '彻底删除'}
+                    </button>
                   </div>
-                  <div className="mt-2 text-xs text-gray-400">
-                    删除时间: {moment(c.deletedAt).format('YYYY-MM-DD HH:mm')}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleRestore(c._id, c.name)}
-                    className="px-3 py-1.5 text-sm font-medium text-primary-600 hover:bg-primary-50 rounded-lg flex items-center gap-1.5 transition-colors"
-                  >
-                    <RotateCcw size={14} />
-                    恢复
-                  </button>
-                  <button
-                    onClick={() => handlePermanentDelete(c._id, c.name)}
-                    className="px-3 py-1.5 text-sm font-medium text-danger-600 hover:bg-danger-50 rounded-lg flex items-center gap-1.5 transition-colors"
-                  >
-                    <Trash size={14} />
-                    彻底删除
-                  </button>
                 </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
