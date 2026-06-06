@@ -48,4 +48,11 @@ contractSchema.pre(/^find/, function(next) {
   next();
 });
 
+contractSchema.pre('countDocuments', function(next) {
+  if (!this.getOptions().includeDeleted) {
+    this.where({ isDeleted: { $ne: true } });
+  }
+  next();
+});
+
 module.exports = mongoose.model('Contract', contractSchema);

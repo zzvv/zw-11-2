@@ -106,6 +106,17 @@ router.delete('/:id', async (req, res) => {
       { new: true }
     );
     if (!contract) return res.status(404).json({ success: false, message: '合同不存在' });
+
+    const now = new Date();
+    await PaymentPlan.updateMany(
+      { contractId: contract._id },
+      { isDeleted: true, deletedAt: now }
+    );
+    await ChangeRecord.updateMany(
+      { contractId: contract._id },
+      { isDeleted: true, deletedAt: now }
+    );
+
     res.json({ success: true, message: '合同已移入回收站，将保留30天' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -122,7 +133,17 @@ router.post('/recycle/restore/:id', async (req, res) => {
     if (!contract) {
       return res.status(404).json({ success: false, message: '合同不存在或未在回收站中' });
     }
-    res.json({ success: true, message: '合同及关联数据已恢复' });
+
+    await PaymentPlan.updateMany(
+      { contractId: contract._id },
+      { isDeleted: false, deletedAt: null }
+    ).setOptions({ includeDeleted: true });
+    await ChangeRecord.updateMany(
+      { contractId: contract._id },
+      { isDeleted: false, deletedAt: null }
+    ).setOptions({ includeDeleted: true });
+
+    res.json({ success: true, message: '合同及关联的付款计划、变更记录已恢复' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -135,11 +156,11 @@ router.delete('/recycle/permanent/:id', async (req, res) => {
       return res.status(404).json({ success: false, message: '合同不存在或未在回收站中' });
     }
 
-    const paymentCount = await PaymentPlan.countDocuments({ contractId: contract._id });
-    const changeCount = await ChangeRecord.countDocuments({ contractId: contract._id });
+    const paymentCount = await PaymentPlan.countDocuments({ contractId: contract._id }).setOptions({ includeDeleted: true });
+    const changeCount = await ChangeRecord.countDocuments({ contractId: contract._id }).setOptions({ includeDeleted: true });
 
-    await PaymentPlan.deleteMany({ contractId: contract._id });
-    await ChangeRecord.deleteMany({ contractId: contract._id });
+    await PaymentPlan.deleteMany({ contractId: contract._id }).setOptions({ includeDeleted: true });
+    await ChangeRecord.deleteMany({ contractId: contract._id }).setOptions({ includeDeleted: true });
     await Contract.findByIdAndDelete(contract._id).setOptions({ includeDeleted: true });
 
     await CleanupLog.create({
@@ -152,7 +173,7 @@ router.delete('/recycle/permanent/:id', async (req, res) => {
       cleanedBy: req.body.cleanedBy || '系统管理员'
     });
 
-    res.json({ success: true, message: '合同已彻底删除' });
+    res.json({ success: true, message: '合同及其关联数据已彻底删除' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -165,13 +186,13 @@ router.delete('/recycle/empty', async (req, res) => {
     let totalChanges = 0;
 
     for (const contract of contracts) {
-      const paymentCount = await PaymentPlan.countDocuments({ contractId: contract._id });
-      const changeCount = await ChangeRecord.countDocuments({ contractId: contract._id });
+      const paymentCount = await PaymentPlan.countDocuments({ contractId: contract._id }).setOptions({ includeDeleted: true });
+      const changeCount = await ChangeRecord.countDocuments({ contractId: contract._id }).setOptions({ includeDeleted: true });
       totalPayments += paymentCount;
       totalChanges += changeCount;
 
-      await PaymentPlan.deleteMany({ contractId: contract._id });
-      await ChangeRecord.deleteMany({ contractId: contract._id });
+      await PaymentPlan.deleteMany({ contractId: contract._id }).setOptions({ includeDeleted: true });
+      await ChangeRecord.deleteMany({ contractId: contract._id }).setOptions({ includeDeleted: true });
 
       await CleanupLog.create({
         contractId: contract._id,

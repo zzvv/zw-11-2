@@ -10,7 +10,23 @@ const paymentPlanSchema = new mongoose.Schema({
   paidDate: { type: Date },
   paidAmount: { type: Number, default: 0 },
   paymentMethod: { type: String },
-  alertSent7: { type: Boolean, default: false }
+  alertSent7: { type: Boolean, default: false },
+  isDeleted: { type: Boolean, default: false },
+  deletedAt: { type: Date }
 }, { timestamps: true });
+
+paymentPlanSchema.pre(/^find/, function(next) {
+  if (!this.getOptions().includeDeleted) {
+    this.where({ isDeleted: { $ne: true } });
+  }
+  next();
+});
+
+paymentPlanSchema.pre('countDocuments', function(next) {
+  if (!this.getOptions().includeDeleted) {
+    this.where({ isDeleted: { $ne: true } });
+  }
+  next();
+});
 
 module.exports = mongoose.model('PaymentPlan', paymentPlanSchema);

@@ -54,11 +54,11 @@ const startScheduler = () => {
 
     let cleanedCount = 0;
     for (const contract of expiredContracts) {
-      const paymentCount = await PaymentPlan.countDocuments({ contractId: contract._id });
-      const changeCount = await ChangeRecord.countDocuments({ contractId: contract._id });
+      const paymentCount = await PaymentPlan.countDocuments({ contractId: contract._id }).setOptions({ includeDeleted: true });
+      const changeCount = await ChangeRecord.countDocuments({ contractId: contract._id }).setOptions({ includeDeleted: true });
 
-      await PaymentPlan.deleteMany({ contractId: contract._id });
-      await ChangeRecord.deleteMany({ contractId: contract._id });
+      await PaymentPlan.deleteMany({ contractId: contract._id }).setOptions({ includeDeleted: true });
+      await ChangeRecord.deleteMany({ contractId: contract._id }).setOptions({ includeDeleted: true });
       await Contract.findByIdAndDelete(contract._id).setOptions({ includeDeleted: true });
 
       await CleanupLog.create({

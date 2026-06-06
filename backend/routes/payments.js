@@ -16,6 +16,9 @@ router.get('/contract/:contractId', async (req, res) => {
 // 创建付款计划
 router.post('/', async (req, res) => {
   try {
+    const { contractId } = req.body;
+    const contract = await Contract.findById(contractId);
+    if (!contract) return res.status(404).json({ success: false, message: '合同不存在或已删除' });
     const plan = new PaymentPlan(req.body);
     await plan.save();
     res.status(201).json({ success: true, data: plan });
@@ -33,13 +36,15 @@ router.put('/:id/pay', async (req, res) => {
       { paidAmount, paidDate, paymentMethod, status: '已付款' },
       { new: true }
     );
+    if (!plan) return res.status(404).json({ success: false, message: '付款计划不存在' });
 
-    // 更新合同已执行金额
     const contract = await Contract.findById(plan.contractId);
-    const allPlans = await PaymentPlan.find({ contractId: plan.contractId, status: '已付款' });
-    const totalPaid = allPlans.reduce((sum, p) => sum + p.paidAmount, 0);
-    contract.executedAmount = totalPaid;
-    await contract.save();
+    if (contract) {
+      const allPlans = await PaymentPlan.find({ contractId: plan.contractId, status: '已付款' });
+      const totalPaid = allPlans.reduce((sum, p) => sum + p.paidAmount, 0);
+      contract.executedAmount = totalPaid;
+      await contract.save();
+    }
 
     res.json({ success: true, data: plan });
   } catch (error) {

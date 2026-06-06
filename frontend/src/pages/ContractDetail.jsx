@@ -35,7 +35,7 @@ export default function ContractDetail() {
   }
 
   const handleDelete = async () => {
-    if (!confirm('确认删除此合同？此操作不可恢复。')) return
+    if (!confirm('确认删除此合同？删除后将移入回收站，保留30天后自动清理。')) return
     await deleteContract(id)
     navigate('/contracts')
   }
